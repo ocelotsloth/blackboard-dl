@@ -12,7 +12,6 @@ module BlackBoard::Dl
   HEADERS    = HTTP::Headers{"User-Agent" => "Mobile Learn/3333 CFNetwork/758.0.2 Darwin/16.0.0", "Accept-Language" => "en-gb"}
   COOKIES    = {"s_session_id" => "", "session_id" => "", "web_client_cache_guid" => ""}
   BB_VERSION = "4.1.2"
-
   class Client
     def initialize(@host : String, @username : String, @password : String)
       self
@@ -100,16 +99,25 @@ module BlackBoard::Dl
       return status
     end
 
+    # Manually set session cookies
+    def manual_login(s_session_id, session_id, web_client_cache_guid, samlSessionId)
+      COOKIES["s_session_id"] = s_session_id.to_s
+      COOKIES["session_id"] = session_id.to_s
+      COOKIES["web_client_cache_guid"] = web_client_cache_guid.to_s
+      COOKIES["samlSessionId"] = samlSessionId.to_s
+    end
+
     # Gets the students courses.
     def get_courses
       course_ids = [] of Hash(String, String | Nil)
       client = HTTP::Client.new URI.parse(@host)
 
       # Send Cookie header.
-      HEADERS["Cookie"] = ("web_client_cache_guid=#{COOKIES["web_client_cache_guid"]}; session_id=#{COOKIES["session_id"]}; s_session_id=#{COOKIES["s_session_id"]}")
+      HEADERS["Cookie"] = ("web_client_cache_guid=#{COOKIES["web_client_cache_guid"]}; session_id=#{COOKIES["session_id"]}; s_session_id=#{COOKIES["s_session_id"]}; samlSessionId=#{COOKIES["samlSessionId"]}")
       res = client.post(COURSES_PATH, headers: HEADERS)
       client.close
       # Parse courses.
+      puts res.body.to_s
       mobileresponse = XML.parse(res.body.to_s).first_element_child.as(XML::Node).children[0]
       mobileresponse.children.each do |course|
         if course["daysFromTheDateOfEnrollment"] == "0"
@@ -127,7 +135,7 @@ module BlackBoard::Dl
       client = HTTP::Client.new URI.parse(@host)
 
       # Send 'Cookie' header.
-      HEADERS["Cookie"] = ("web_client_cache_guid=#{COOKIES["web_client_cache_guid"]}; session_id=#{COOKIES["session_id"]}; s_session_id=#{COOKIES["s_session_id"]}")
+      HEADERS["Cookie"] = ("web_client_cache_guid=#{COOKIES["web_client_cache_guid"]}; session_id=#{COOKIES["session_id"]}; s_session_id=#{COOKIES["s_session_id"]}; samlSessionId=#{COOKIES["samlSessionId"]}")
 
       # Get course data and start downloading attachments.
       res = client.post(COURSE + "&course_id=" + course_id, headers: HEADERS)
@@ -251,7 +259,7 @@ module BlackBoard::Dl
         client = HTTP::Client.new URI.parse(@host)
         client.close
 
-        HEADERS["Cookie"] = ("web_client_cache_guid=#{COOKIES["web_client_cache_guid"]}; session_id=#{COOKIES["session_id"]}; s_session_id=#{COOKIES["s_session_id"]}")
+        HEADERS["Cookie"] = ("web_client_cache_guid=#{COOKIES["web_client_cache_guid"]}; session_id=#{COOKIES["session_id"]}; s_session_id=#{COOKIES["s_session_id"]}; samlSessionId=#{COOKIES["samlSessionId"]}")
         location = client.get(attachment_url, headers: HEADERS)
         client.close
 

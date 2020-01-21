@@ -28,12 +28,23 @@ module BlackBoard::Dl
     banner = "Blackboard course downloader " + "v#{VERSION}".colorize.green.to_s + " - [c] 2017 Wesley Hill"
     bb_username = Nil
     bb_password = Nil
+    bb_s_session_id = Nil
+    bb_session_id = Nil
+    bb_web_client_cache_guid = Nil
+    bb_samlSessionId = Nil
     daemon = false
+    sso = false
 
     OptionParser.parse do |parser|
-      parser.banner = "usage: blackboard-dl [-h] [-d] [-u USERNAME] [-p PASSWORD] [--version]\n\ndownload course files from blackboard.\n\noptional arguments:"
+      parser.banner = "usage: blackboard-dl [-h] [-d] [-u USERNAME] [-p PASSWORD] [--sso] [--version]\n\ndownload course files from blackboard.\n\noptional arguments:"
       parser.on("-u USERNAME", "--username", "Blackboard username") { |username| bb_username = username }
       parser.on("-p PASSWORD", "--password", "Blackboard password") { |password| bb_password = password }
+      parser.on("-s", "--sso", "Input raw headers instead of user/pass") { sso = true }
+      parser.on("--s_session_id S_SESSION_ID", "s_session_id cookie") { |s_session_id| bb_s_session_id = s_session_id }
+      parser.on("--session_id SESSION_ID", "session_id cookie") { |session_id| bb_session_id = session_id }
+      parser.on("--web_client_cache_guid WEB_CLIENT_CACHE_GUID",
+        "web_client_cache_guid cookie (if present)") { |web_client_cache_guid| bb_web_client_cache_guid = web_client_cache_guid }
+      parser.on("--samlSessionId", "Saml Session ID") { |samlSessionId| bb_samlSessionId = samlSessionId }
       parser.on("-d", "--daemon", "Run as daemon") { daemon = true }
       parser.on("-h", "--help", "Show this help") { puts parser; exit(0) }
       parser.on("-v", "--version", "Show program version") { puts BlackBoard::Dl::VERSION }
@@ -57,7 +68,7 @@ module BlackBoard::Dl
     puts "#{@@college["host"]}".colorize.green
 
     # Present a prompt to the student to enter in their course details instead of using the argument parser.
-    if (bb_username && bb_password) == Nil
+    if ((bb_username && bb_password) == Nil) && !sso
       puts "-Login--------------------------".colorize.green.mode(:dim)
       username = Readline.readline("[?] Blackboard username: ".colorize.green.to_s, add_history = true)
       print "[?] Blackboard password (hidden): ".colorize.green
@@ -70,14 +81,14 @@ module BlackBoard::Dl
 
     # Download as normal or as a daemon.
     if daemon == true
-      download_as_daemon(bb_username, bb_password)
+      download_as_daemon(bb_username, bb_password, bb_s_session_id, bb_session_id, bb_web_client_cache_guid, bb_samlSessionId)
     else
-      download(@@college["url"], bb_username, bb_password)
+      download(@@college["url"], bb_username, bb_password, bb_s_session_id, bb_session_id, bb_web_client_cache_guid, bb_samlSessionId)
     end
   end
 
   # Download course material as a daemon with a username & password.
-  def self.download_as_daemon(bb_username, bb_password)
+  def self.download_as_daemon(bb_username, bb_password, bb_s_session_id, bb_session_id, bb_web_client_cache_guid, bb_samlSessionId)
     # Daemonize process.
     puts "Running daemon in the background on pid: #{Process.pid + 2}".colorize.magenta.mode(:bold).to_s
     stdout_log = Dir.current + "/bbdl_output.log"
@@ -98,32 +109,36 @@ module BlackBoard::Dl
       puts "Checking for new course material in #{diff.minutes} minute(s)"
       sleep diff.duration
       puts "Checking new courses at #{Time.local.to_s("%T")}"
-      download(@@college["url"], bb_username, bb_password)
+      download(@@college["url"], bb_username, bb_password, bb_s_session_id, bb_session_id, bb_web_client_cache_guid, bb_samlSessionId)
       now = Time.local
       diff = now.at_end_of_hour - now
     end
   end
 
   # Download courses material with a college url, username & password.
-  def self.download(bb_url, bb_username, bb_password)
+  def self.download(bb_url, bb_username, bb_password, bb_s_session_id, bb_session_id, bb_web_client_cache_guid, bb_samlSessionId)
     # Make sure we download to this directory.
     print "\r[+] Logging in...".colorize.green.mode(:dim)
     client = BlackBoard::Dl::Client.new(bb_url.to_s, bb_username.to_s, bb_password.to_s)
-    # Login.
-    begin
-      status = client.login
-    rescue error
-      puts "\r[x] Unable to login try again later...".colorize.red
-      puts "[!] Reason: #{error}".colorize.red
-      exit(1)
-    end
-    if status != "OK"
-      puts "Login incorrect, please check your credentials and college and try again.".colorize.red
-      puts ("Hint: The college you selected was: %s") % ("#{@@college["name"]}".colorize.green.mode(:bold).to_s)
-      exit(1)
+    if false
+      # Login.
+      begin
+        status = client.login
+      rescue error
+        puts "\r[x] Unable to login try again later...".colorize.red
+        puts "[!] Reason: #{error}".colorize.red
+        exit(1)
+      end
+      if status != "OK"
+        puts "Login incorrect, please check your credentials and college and try again.".colorize.red
+        puts ("Hint: The college you selected was: %s") % ("#{@@college["name"]}".colorize.green.mode(:bold).to_s)
+        exit(1)
+      else
+        print "\n"
+        puts ("[+] Successfully logged into Blackboard as" + " %s!".colorize.green.mode(:bold).to_s) % (bb_username.to_s)
+      end
     else
-      print "\n"
-      puts ("[+] Successfully logged into Blackboard as" + " %s!".colorize.green.mode(:bold).to_s) % (bb_username.to_s)
+      client.manual_login(bb_s_session_id, bb_session_id, bb_web_client_cache_guid, bb_samlSessionId)
     end
 
     # Fetch enrolled courses.
